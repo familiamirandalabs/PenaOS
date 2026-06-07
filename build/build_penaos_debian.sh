@@ -53,6 +53,12 @@ ROOTFS="$WORK/rootfs"
 ISODIR="$WORK/iso"
 OUT="$WORK/penaos-debian-$ARCH.iso"
 
+# cache (sobrevive entre builds; NAO e apagado com o $WORK) — evita rebaixar
+# 1 GB toda vez. base-*.tar.gz = Debian minimo; apt-* = .debs ja baixados.
+DEB_CACHE="$DEB_DIR/cache"
+BASE_TAR="$DEB_CACHE/base-$DIST-$ARCH.tar.gz"
+APT_CACHE="$DEB_CACHE/apt-$DIST-$ARCH"
+
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 err()  { printf '\n\033[1;31mERRO: %s\033[0m\n' "$*" >&2; exit 1; }
 warn() { printf '\033[1;33m  ! %s\033[0m\n' "$*" >&2; }
@@ -89,7 +95,7 @@ esac
 # ---- limpeza + trap pra desmontar sempre ------------------------------------
 cleanup() {
     set +e
-    for m in dev/pts dev proc sys run; do
+    for m in var/cache/apt/archives dev/pts dev proc sys run; do
         mountpoint -q "$ROOTFS/$m" && umount -lf "$ROOTFS/$m" 2>/dev/null
     done
 }
@@ -100,11 +106,20 @@ cleanup
 rm -rf "$WORK"
 mkdir -p "$ROOTFS" "$ISODIR/live" "$ISODIR/boot/grub"
 
-# ---- 1) debootstrap: baixa um Debian minimo ---------------------------------
-say "debootstrap: baixando Debian $DIST/$ARCH (demora; baixa da internet)"
-debootstrap --arch="$ARCH" --variant=minbase \
-    --keyring="$KEYRING" \
-    "$DIST" "$ROOTFS" "$MIRROR"
+# ---- 1) debootstrap: baixa um Debian minimo (com cache) ---------------------
+mkdir -p "$DEB_CACHE"
+if [[ -f "$BASE_TAR" ]]; then
+    say "debootstrap: reaproveitando a base do cache ($BASE_TAR)"
+    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
+        --unpack-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
+else
+    say "debootstrap: baixando Debian $DIST/$ARCH (1a vez; salva cache pra proxima)"
+    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
+        --make-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
+    # --make-tarball SO baixa e empacota; agora desempacota de fato no ROOTFS:
+    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
+        --unpack-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
+fi
 
 # ---- 2) prepara o chroot ----------------------------------------------------
 say "Preparando o chroot (apt sources, montagens, rede)"
@@ -120,6 +135,12 @@ mount -t proc  proc   "$ROOTFS/proc"
 mount -t sysfs sys    "$ROOTFS/sys"
 mount --bind   /dev   "$ROOTFS/dev"
 mount --bind   /dev/pts "$ROOTFS/dev/pts"
+
+# cache do apt: bind-mount de um diretorio persistente -> os .debs baixados
+# (kernel, webkit, etc.) ficam guardados e nao baixam de novo no proximo build.
+# Como desmontamos antes do squashfs, esses .debs NAO entram na ISO.
+mkdir -p "$APT_CACHE/partial"
+mount --bind "$APT_CACHE" "$ROOTFS/var/cache/apt/archives"
 
 # nao deixa daemons subirem durante a instalacao no chroot
 cat > "$ROOTFS/usr/sbin/policy-rc.d" <<'EOF'
@@ -147,6 +168,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
     $KPKG live-boot initramfs-tools \
     dbus xserver-xorg-legacy \
+    systemd-resolved sudo iproute2 ca-certificates \
     locales keyboard-configuration console-setup
 # os pacotes do PenaOS (X, openbox, python, webkit, gstreamer, zram, fontes...)
 apt-get install -y --no-install-recommends $PKGS
@@ -155,7 +177,7 @@ sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen || true
 locale-gen || true
 # root sem senha (live; o autologin do tty1 sobe a area de trabalho)
 passwd -d root || true
-apt-get clean
+# NAO roda 'apt-get clean' aqui: queremos manter os .debs no cache (bind-mount).
 CHROOT
 
 # ---- 4) overlay do desktop dentro do rootfs ---------------------------------
@@ -177,13 +199,22 @@ chroot "$ROOTFS" /usr/bin/env -i \
 # o drop-in de autologin do getty@tty1 ja veio do overlay (includes do desktop)
 systemctl enable systemd-zram-setup@zram0.service 2>/dev/null || true
 systemctl set-default multi-user.target 2>/dev/null || true
+# REDE (substitui o que o live-config fazia): networkd pede IP por DHCP e
+# resolved cuida do DNS. Sem isto o sistema sobe sem internet.
+systemctl enable systemd-networkd.service 2>/dev/null || true
+systemctl enable systemd-resolved.service 2>/dev/null || true
+# nao trava o boot esperando a rede ficar pronta
+systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
 # regenera o initramfs JA com os ganchos do live-boot
 update-initramfs -u || update-initramfs -c -k all || true
 CHROOT
 
 # ---- 6) limpa e desmonta o chroot -------------------------------------------
 rm -f "$ROOTFS/usr/sbin/policy-rc.d"
+# o resolv.conf que copiamos pro apt sai; no lugar, aponta pro systemd-resolved
+# (que vai preencher o DNS em runtime via DHCP).
 rm -f "$ROOTFS/etc/resolv.conf"
+ln -sf /run/systemd/resolve/stub-resolv.conf "$ROOTFS/etc/resolv.conf"
 cleanup
 
 # ---- 7) kernel + initrd pro lado da ISO -------------------------------------

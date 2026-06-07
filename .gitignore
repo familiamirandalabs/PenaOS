@@ -4,6 +4,7 @@ build/out/
 build/tmp/
 build/debian/work/
 build/debian/lb/
+build/debian/cache/
 *.iso
 *.log
 

@@ -1,0 +1,15 @@
+# ============================================================================
+#  20-ethernet.network  —  rede do PenaOS (igual ao archiso)
+# ----------------------------------------------------------------------------
+#  Pega QUALQUER placa de rede com fio (en*, eth*, na VM costuma ser enp0s3)
+#  e pede IP/DNS por DHCP. Sem isto o sistema sobe sem internet (nem o
+#  navegador nem o 'apt' resolvem nomes).
+# ============================================================================
+[Match]
+Type=ether
+
+[Network]
+DHCP=yes
+# DNS de reserva, caso o DHCP nao entregue um (Cloudflare + Google)
+DNS=1.1.1.1
+DNS=8.8.8.8
