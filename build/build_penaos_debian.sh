@@ -132,10 +132,17 @@ EOF
 # ---- 3) instala pacotes DENTRO do chroot ------------------------------------
 PKGS="$(grep -vE '^\s*#|^\s*$' "$PKG_LIST" | tr '\n' ' ')"
 say "Instalando pacotes no chroot (kernel + live-boot + $(echo "$PKGS" | wc -w) da lista)"
-chroot "$ROOTFS" /usr/bin/env -i \
-    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
-    DEBIAN_FRONTEND=noninteractive LANG=C \
-    bash -e <<CHROOT
+#
+#  ATENCAO (bug que custou caro): NAO alimentar este script via 'bash <<HEREDOC'
+#  pela STDIN. Alguns postinsts do dpkg (keyboard-configuration, console-setup)
+#  LEEM a stdin -> eles ENGOLEM o resto do heredoc, o 'apt-get install $PKGS'
+#  (os pacotes graficos) NUNCA roda, o bash chega no EOF e SAI 0. Resultado: a
+#  ISO "compila" sem GUI e da 'startx: command not found'. Por isso escrevemos
+#  o script num ARQUIVO e rodamos com '</dev/null' (stdin fechado).
+#
+cat > "$ROOTFS/root/penaos-install.sh" <<CHROOT
+#!/bin/bash
+set -e
 apt-get update
 # nucleo do sistema live: kernel + systemd-sysv (o /sbin/init) + live-boot
 # (monta a squashfs no boot) + initramfs-tools (gera o initrd).
@@ -155,7 +162,7 @@ passwd -d root || true
 # se o autologin falhar por qualquer motivo, ninguem fica trancado pra fora.
 # (o Debian as vezes NAO traz 'nullok' por padrao -> login sem senha e recusado)
 if [ -f /etc/pam.d/common-auth ] && ! grep -q 'pam_unix.so.*nullok' /etc/pam.d/common-auth; then
-    sed -i '/pam_unix\.so/ s/$/ nullok/' /etc/pam.d/common-auth
+    sed -i '/pam_unix\.so/ s/\$/ nullok/' /etc/pam.d/common-auth
 fi
 # NAO roda 'apt-get clean': mantemos os .debs no cache (bind-mount).
 
@@ -167,8 +174,20 @@ test -x "\$(readlink -f /sbin/init)" \
     || { echo "FATAL: /sbin/init nao aponta pra um binario valido"; exit 2; }
 dpkg --audit 2>/dev/null | grep -q . \
     && { echo "FATAL: pacotes meio-configurados:"; dpkg --audit; exit 2; }
-echo "OK: systemd-sysv instalado e /sbin/init valido."
+# CONFERE que o DESKTOP foi instalado mesmo (startx/Xorg/openbox). E o que
+# separa uma ISO que sobe a area de trabalho de uma 'startx: command not found'.
+for bin in startx Xorg openbox python3 xterm; do
+    command -v "\$bin" >/dev/null 2>&1 \
+        || { echo "FATAL: '\$bin' nao foi instalado (GUI faltando)"; exit 4; }
+done
+echo "OK: systemd-sysv + /sbin/init validos + desktop (startx/Xorg/openbox) presente."
 CHROOT
+chmod +x "$ROOTFS/root/penaos-install.sh"
+chroot "$ROOTFS" /usr/bin/env -i \
+    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    DEBIAN_FRONTEND=noninteractive LANG=C \
+    bash /root/penaos-install.sh </dev/null
+rm -f "$ROOTFS/root/penaos-install.sh"
 
 # ---- 4) overlay do desktop dentro do rootfs ---------------------------------
 say "Aplicando o desktop do PenaOS (overlay + painel + navegador + abridor .exe)"
@@ -182,8 +201,9 @@ cp "$SHELL_SRC" "$ROOTFS/opt/penaos/pena_shell.py"
 
 # ---- 5) habilita servicos (autologin via overlay, zram, rede) ---------------
 say "Habilitando autologin, zram e rede; regenerando o initramfs LIVE"
-chroot "$ROOTFS" /usr/bin/env -i \
-    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C bash -e <<'CHROOT'
+cat > "$ROOTFS/root/penaos-services.sh" <<'CHROOT'
+#!/bin/bash
+set -e
 systemctl set-default multi-user.target 2>/dev/null || true
 systemctl enable systemd-zram-setup@zram0.service 2>/dev/null || true
 systemctl enable systemd-networkd.service 2>/dev/null || true
@@ -201,6 +221,11 @@ lsinitramfs "$INITRD_FILE" 2>/dev/null | grep -q 'scripts/live' \
     || { echo "FATAL: initramfs sem live-boot ($INITRD_FILE); boot=live seria ignorado"; exit 3; }
 echo "OK: initramfs e LIVE -> $INITRD_FILE"
 CHROOT
+chmod +x "$ROOTFS/root/penaos-services.sh"
+chroot "$ROOTFS" /usr/bin/env -i \
+    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C \
+    bash /root/penaos-services.sh </dev/null
+rm -f "$ROOTFS/root/penaos-services.sh"
 
 # ---- 6) limpa e desmonta o chroot -------------------------------------------
 rm -f "$ROOTFS/usr/sbin/policy-rc.d"
