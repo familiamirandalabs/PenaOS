@@ -14,13 +14,19 @@
 #  e arquivos de config, nao dependem da base. So a "como montar a imagem"
 #  muda de archiso pra live-build.
 #
+#  IMPORTANTE: voce NAO precisa de 'apt' no host. O live-build (comando 'lb')
+#  baixa o Debian sozinho (via debootstrap). Ele roda tanto no Debian quanto
+#  no Arch — so o nome do pacote da ferramenta muda. O 'apt' so existe DENTRO
+#  da ISO Debian depois de pronta.
+#
 #  COMO USAR:
 #    # 1) instalar a ferramenta (uma vez):
-#    sudo apt install live-build        # (ou: sudo pacman -S debian-live-build no Arch)
+#    #   Arch:          sudo pacman -S debootstrap   &&   yay -S live-build  (AUR)
+#    #   Debian/Ubuntu: sudo apt install live-build
 #    # 2) rodar como root:
 #    sudo ~/Documents/penaos/build/build_penaos_debian.sh
 #    # multi-arch:  PENA_ARCH=i386 sudo ./build_penaos_debian.sh
-#    # 3) a ISO sai em:  build/debian/live-image-*.hybrid.iso
+#    # 3) a ISO sai em:  build/debian/lb/live-image-*.hybrid.iso
 # ============================================================================
 set -euo pipefail
 
@@ -44,8 +50,12 @@ err() { printf '\n\033[1;31mERRO: %s\033[0m\n' "$*" >&2; exit 1; }
 # ---- checagens --------------------------------------------------------------
 [[ $EUID -eq 0 ]] || err "rode como root:  sudo $0"
 command -v lb >/dev/null 2>&1 || err "falta o live-build (comando 'lb').
+  Arch:           sudo pacman -S debootstrap  &&  yay -S live-build   (AUR)
   Debian/Ubuntu:  sudo apt install live-build
-  Arch:           sudo pacman -S debian-live-build  (ou via AUR: live-build)"
+  (voce NAO precisa de apt no host: o live-build baixa o Debian via debootstrap)"
+command -v debootstrap >/dev/null 2>&1 || err "falta o debootstrap (o live-build usa ele).
+  Arch:           sudo pacman -S debootstrap
+  Debian/Ubuntu:  sudo apt install debootstrap"
 [[ -f "$PKG_LIST" ]]    || err "lista de pacotes nao encontrada: $PKG_LIST"
 [[ -f "$SHELL_SRC" ]]   || err "nao achei o shell: $SHELL_SRC"
 [[ -d "$SHARED_OVERLAY" ]] || err "overlay compartilhado ausente: $SHARED_OVERLAY"
