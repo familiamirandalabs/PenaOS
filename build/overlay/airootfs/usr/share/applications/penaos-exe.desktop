@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Abrir programa do Windows (PenaOS)
+Comment=Abre arquivos .exe direto pelo Wine, mostrando o proprio app
+Exec=python3 /opt/penaos/pena_run_exe.py %f
+Icon=wine
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msi;
+Categories=System;Utility;

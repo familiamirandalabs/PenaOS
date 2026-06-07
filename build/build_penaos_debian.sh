@@ -31,6 +31,7 @@ DEB_DIR="$SCRIPT_DIR/debian"                       # config especifica Debian
 PKG_LIST="$DEB_DIR/packages.list.chroot"
 SHELL_SRC="$PROJ_DIR/shell/pena_shell.py"
 BROWSER_SRC="$PROJ_DIR/shell/pena_browser.py"
+RUNEXE_SRC="$PROJ_DIR/shell/pena_run_exe.py"
 LB="$DEB_DIR/lb"                                    # diretorio de trabalho do live-build
 
 # distribuicao Debian estavel atual
@@ -107,6 +108,7 @@ rsync -a --exclude 'etc/pacman.d' "$SHARED_OVERLAY/." config/includes.chroot/
 mkdir -p config/includes.chroot/opt/penaos
 cp "$SHELL_SRC"   config/includes.chroot/opt/penaos/pena_shell.py
 [[ -f "$BROWSER_SRC" ]] && cp "$BROWSER_SRC" config/includes.chroot/opt/penaos/pena_browser.py
+[[ -f "$RUNEXE_SRC" ]]  && cp "$RUNEXE_SRC"  config/includes.chroot/opt/penaos/pena_run_exe.py
 
 # ---- ajusta o os-release pra dizer "parecido com Debian" --------------------
 OSREL="config/includes.chroot/etc/os-release"

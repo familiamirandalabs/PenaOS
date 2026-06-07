@@ -139,6 +139,9 @@ cp "$SHELL_SRC" "$PROFILE/airootfs/opt/penaos/pena_shell.py"
 # nosso mini-navegador (Python + WebKitGTK, redirect YouTube->Invidious)
 BROWSER_SRC="$PROJ_DIR/shell/pena_browser.py"
 [[ -f "$BROWSER_SRC" ]] && cp "$BROWSER_SRC" "$PROFILE/airootfs/opt/penaos/pena_browser.py"
+# lancador enxuto de .exe (abre o app pelo Wine, sem mostrar pasta)
+RUNEXE_SRC="$PROJ_DIR/shell/pena_run_exe.py"
+[[ -f "$RUNEXE_SRC" ]] && cp "$RUNEXE_SRC" "$PROFILE/airootfs/opt/penaos/pena_run_exe.py"
 [[ -f "$CONFIG_SRC" ]] && \
     mkdir -p "$PROFILE/airootfs/opt/penaos/config" && \
     cp "$CONFIG_SRC" "$PROFILE/airootfs/opt/penaos/config/default.json"

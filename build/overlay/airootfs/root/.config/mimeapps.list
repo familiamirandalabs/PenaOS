@@ -1,0 +1,15 @@
+# ============================================================================
+#  mimeapps.list  —  associacoes de tipo de arquivo do PenaOS
+# ----------------------------------------------------------------------------
+#  Faz o .exe (e .msi) abrir com o nosso lancador enxuto, que mostra o
+#  PROPRIO APP pelo Wine — nao uma estrutura de pastas.
+# ============================================================================
+[Default Applications]
+application/x-ms-dos-executable=penaos-exe.desktop
+application/x-msdownload=penaos-exe.desktop
+application/x-msi=penaos-exe.desktop
+
+[Added Associations]
+application/x-ms-dos-executable=penaos-exe.desktop
+application/x-msdownload=penaos-exe.desktop
+application/x-msi=penaos-exe.desktop
