@@ -1,0 +1,46 @@
+# ============================================================================
+#  packages.list.chroot — pacotes do PenaOS no Debian (live-build)
+# ----------------------------------------------------------------------------
+#  Mesma filosofia da versao Arch: so o ESSENCIAL. Nomes sao os do Debian.
+#  Apps pesados (Office, Wine, etc) NAO entram aqui — sao "camadas" instaladas
+#  sob demanda pela Central de Programas (modelo .tcz do Tiny Core).
+# ============================================================================
+
+# ---- sistema live (boot da ISO em RAM) -------------------------------------
+live-boot
+live-config
+live-config-systemd
+systemd-sysv
+
+# ---- servidor grafico (minimo, drivers de VM) ------------------------------
+xserver-xorg-core
+xserver-xorg-video-vesa
+xserver-xorg-video-fbdev
+xserver-xorg-input-libinput
+xinit
+x11-xserver-utils
+
+# ---- gerenciador de janelas + terminal -------------------------------------
+openbox
+xterm
+
+# ---- Python + Tkinter (painel pena_shell.py) -------------------------------
+python3
+python3-tk
+
+# ---- navegador proprio (pena_browser.py: Python + WebKitGTK) ---------------
+python3-gi
+gir1.2-gtk-3.0
+gir1.2-webkit2-4.1
+
+# ---- codecs de video (sem isto o Invidious da "incompatible") --------------
+gstreamer1.0-plugins-base
+gstreamer1.0-plugins-good
+gstreamer1.0-libav
+gstreamer1.0-gl
+
+# ---- otimizacao pouca RAM (POTATO) -----------------------------------------
+systemd-zram-generator
+
+# ---- fontes ----------------------------------------------------------------
+fonts-dejavu-core

@@ -169,7 +169,9 @@ def run_gui():
         tk.Label(body, text="", bg=BG2).pack()
         tk.Label(body, text=f"{OS_NAME}  {OS_VERSION}",
                  bg=BG2, fg=TEXT, font=FONT_B).pack()
-        tk.Label(body, text="Sistema levinho, sem telemetria,",
+        tk.Label(body, text="The Internet at the blink of an eye.",
+                 bg=BG2, fg=ACCENT, font=FONT_SM).pack()
+        tk.Label(body, text="Levinho, sem telemetria,",
                  bg=BG2, fg=TEXT_DIM, font=FONT_SM).pack()
         tk.Label(body, text="feito com carinho pela familia Miranda.",
                  bg=BG2, fg=TEXT_DIM, font=FONT_SM).pack()

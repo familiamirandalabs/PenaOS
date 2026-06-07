@@ -33,6 +33,14 @@ webkit2gtk-4.1        # motor de render (mesmo do Safari/GNOME Web), sem o peso
 python-gobject        # bindings: Python conversa com GTK/WebKit
 gtk3                  # toolkit grafico do navegador (janela, botoes, barra)
 
+# ---- Codecs de video (SEM ISTO o Invidious mostra "incompatible") -----------
+# O WebKitGTK toca midia via GStreamer. Sem plugins de codec, H.264/VP9/AAC
+# ficam "incompatible" e o video nao roda. Conjunto minimo eficaz:
+gstreamer             # nucleo do GStreamer
+gst-plugins-base      # codecs/containers basicos (ogg, vorbis...)
+gst-plugins-good      # WebM/Matroska + VP8/VP9 (formatos do YouTube/Invidious)
+gst-libav             # H.264 + AAC via ffmpeg (o que o Invidious mais usa)
+
 # ---- Otimizacao pra pouca RAM (POTATO de 500MB) -----------------------------
 zram-generator        # cria swap comprimido na RAM (zstd) -> +memoria de graca
 

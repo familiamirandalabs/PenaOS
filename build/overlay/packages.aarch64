@@ -40,6 +40,12 @@ webkit2gtk-4.1
 python-gobject
 gtk3
 
+# ---- codecs de video (sem isto o Invidious da "incompatible") ---------------
+gstreamer
+gst-plugins-base
+gst-plugins-good
+gst-libav
+
 # ---- fontes ----------------------------------------------------------------
 ttf-dejavu
 xorg-fonts-misc
