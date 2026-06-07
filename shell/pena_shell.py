@@ -184,47 +184,141 @@ def run_gui():
             tk.Label(body, text=d, bg=BG2, fg=TEXT, font=FONT_SM,
                      anchor="w").pack(fill="x")
 
-    # ---- Configuracoes ------------------------------------------------------
+    # ---- Configuracoes (Central estilo Ubuntu/Zorin/Mint) -------------------
+    #  Barra lateral com categorias; painel da direita troca conforme a escolha.
+    #  Mantido ENXUTO: so Tkinter, sem dependencia extra, sem sudo.
     def open_settings():
-        body = app_window("settings", "Central de Configuracoes", 480, 360)
+        body = app_window("settings", "Central de Configuracoes", 640, 420)
         if body is None:
             return
-        items = [
-            ("theme",               "Tema",              ["escuro", "claro"]),
-            ("accent",              "Cor de destaque",   ["verde", "ciano", "amarelo", "vermelho"]),
-            ("clock_24h",           "Relogio 24h",       [True, False]),
-            ("show_clock",          "Mostrar relogio",   [True, False]),
-            ("power_profile",       "Energia",           ["economia", "equilibrado", "desempenho"]),
-        ]
-        tk.Label(body, text="Clique em < ou > para mudar o valor.",
-                 bg=BG2, fg=TEXT_DIM, font=FONT_SM).pack(anchor="w")
-        tk.Label(body, text="As mudancas salvam automaticamente.",
-                 bg=BG2, fg=TEXT_DIM, font=FONT_SM).pack(anchor="w", pady=(0, 8))
 
         def fmt(v):
             return "sim" if v is True else ("nao" if v is False else str(v))
 
-        for key, label, opts in items:
-            row = tk.Frame(body, bg=BG2); row.pack(fill="x", pady=2)
-            tk.Label(row, text=label, bg=BG2, fg=TEXT, font=FONT,
-                     width=20, anchor="w").pack(side="left")
-            var = tk.StringVar(value=fmt(cfg.get(key, opts[0])))
-            def cycle(k=key, o=opts, v=var, d=0):
-                cur = cfg.get(k, o[0])
-                try:    idx = o.index(cur)
-                except ValueError: idx = 0
-                cfg[k] = o[(idx + d) % len(o)]
-                v.set(fmt(cfg[k])); save_config(cfg)
-            tk.Button(row, text="<", bg=TITLE_BG, fg=ACCENT, bd=0, font=FONT_B,
-                      cursor="hand2", command=lambda k=key,o=opts,v=var: cycle(k,o,v,-1)
-                      ).pack(side="left", padx=4)
-            tk.Label(row, textvariable=var, bg=BG2, fg=YELLOW, font=FONT_B,
-                     width=13, anchor="center").pack(side="left")
-            tk.Button(row, text=">", bg=TITLE_BG, fg=ACCENT, bd=0, font=FONT_B,
-                      cursor="hand2", command=lambda k=key,o=opts,v=var: cycle(k,o,v,+1)
-                      ).pack(side="left", padx=4)
-        tk.Label(body, text=f"Config: {USER_CONFIG}", bg=BG2, fg=TEXT_DIM,
-                 font=("Monospace", 8)).pack(anchor="w", pady=(10, 0))
+        # cada categoria: titulo + lista de (chave, rotulo, opcoes)
+        categories = [
+            ("Aparencia", "[#]", [
+                ("theme",   "Tema",            ["escuro", "claro"]),
+                ("accent",  "Cor de destaque", ["verde", "ciano", "amarelo", "vermelho"]),
+            ]),
+            ("Area de trabalho", "[=]", [
+                ("clock_24h",  "Relogio 24h",     [True, False]),
+                ("show_clock", "Mostrar relogio", [True, False]),
+            ]),
+            ("Energia", "[~]", [
+                ("power_profile", "Perfil de energia",
+                 ["economia", "equilibrado", "desempenho"]),
+            ]),
+            ("Rede",    "[@]", None),   # painel especial (so leitura)
+            ("Sistema", "[i]", None),   # painel especial (so leitura)
+        ]
+
+        # ---- layout: sidebar (esq) + conteudo (dir) -------------------------
+        sidebar = tk.Frame(body, bg=TITLE_BG, width=170)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
+        content = tk.Frame(body, bg=BG2)
+        content.pack(side="left", fill="both", expand=True, padx=(14, 0))
+
+        def clear_content():
+            for w in content.winfo_children():
+                w.destroy()
+
+        def render_toggles(title, items):
+            clear_content()
+            tk.Label(content, text=title, bg=BG2, fg=ACCENT,
+                     font=FONT_LG, anchor="w").pack(fill="x", pady=(0, 2))
+            tk.Label(content, text="Clique em < ou > para mudar. Salva sozinho.",
+                     bg=BG2, fg=TEXT_DIM, font=FONT_SM,
+                     anchor="w").pack(fill="x", pady=(0, 10))
+            for key, label, opts in items:
+                row = tk.Frame(content, bg=BG2); row.pack(fill="x", pady=3)
+                tk.Label(row, text=label, bg=BG2, fg=TEXT, font=FONT,
+                         width=18, anchor="w").pack(side="left")
+                var = tk.StringVar(value=fmt(cfg.get(key, opts[0])))
+                def cycle(k=key, o=opts, v=var, d=0):
+                    cur = cfg.get(k, o[0])
+                    try:    idx = o.index(cur)
+                    except ValueError: idx = 0
+                    cfg[k] = o[(idx + d) % len(o)]
+                    v.set(fmt(cfg[k])); save_config(cfg)
+                tk.Button(row, text="<", bg=TITLE_BG, fg=ACCENT, bd=0, font=FONT_B,
+                          cursor="hand2",
+                          command=lambda k=key,o=opts,v=var: cycle(k,o,v,-1)
+                          ).pack(side="left", padx=4)
+                tk.Label(row, textvariable=var, bg=BG2, fg=YELLOW, font=FONT_B,
+                         width=13, anchor="center").pack(side="left")
+                tk.Button(row, text=">", bg=TITLE_BG, fg=ACCENT, bd=0, font=FONT_B,
+                          cursor="hand2",
+                          command=lambda k=key,o=opts,v=var: cycle(k,o,v,+1)
+                          ).pack(side="left", padx=4)
+            tk.Label(content, text=f"Config: {USER_CONFIG}", bg=BG2, fg=TEXT_DIM,
+                     font=("Monospace", 8), anchor="w").pack(fill="x", pady=(14, 0))
+
+        def _run(cmd):
+            try:
+                out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL,
+                                              text=True, timeout=3).strip()
+                return out or "(sem dados)"
+            except Exception:
+                return "(indisponivel)"
+
+        def render_info(title, pairs):
+            clear_content()
+            tk.Label(content, text=title, bg=BG2, fg=ACCENT,
+                     font=FONT_LG, anchor="w").pack(fill="x", pady=(0, 2))
+            tk.Label(content, text="Informacoes do sistema (somente leitura).",
+                     bg=BG2, fg=TEXT_DIM, font=FONT_SM,
+                     anchor="w").pack(fill="x", pady=(0, 10))
+            for label, value in pairs:
+                row = tk.Frame(content, bg=BG2); row.pack(fill="x", pady=2)
+                tk.Label(row, text=label, bg=BG2, fg=TEXT_DIM, font=FONT_SM,
+                         width=14, anchor="w").pack(side="left")
+                tk.Label(row, text=value, bg=BG2, fg=TEXT, font=FONT,
+                         anchor="w", wraplength=380, justify="left"
+                         ).pack(side="left", fill="x", expand=True)
+
+        def show_rede():
+            host = _run(["hostname"])
+            ips  = _run(["hostname", "-I"])
+            render_info("Rede", [
+                ("Maquina", host),
+                ("IP(s)",   ips),
+                ("DNS",     "definido pela rede (DHCP)"),
+                ("Privacidade", "navegador redireciona YouTube -> Invidious"),
+            ])
+
+        def show_sistema():
+            kern = _run(["uname", "-sr"])
+            up   = _run(["uptime", "-p"])
+            render_info("Sistema", [
+                ("Sistema", f"{OS_NAME} {OS_VERSION}"),
+                ("Kernel",  kern),
+                ("Ligado ha", up),
+                ("Janelas", "Openbox + painel proprio"),
+                ("Telemetria", "NENHUMA."),
+            ])
+
+        # ---- botoes da sidebar ----------------------------------------------
+        btns = {}
+        def select(name):
+            for n, b in btns.items():
+                b.config(bg=(ACCENT if n == name else TITLE_BG),
+                         fg=(BG if n == name else TEXT))
+            spec = next(c for c in categories if c[0] == name)
+            if name == "Rede":      show_rede()
+            elif name == "Sistema": show_sistema()
+            else:                   render_toggles(name, spec[2])
+
+        for name, icon, _spec in categories:
+            b = tk.Button(sidebar, text=f" {icon}  {name}", bg=TITLE_BG, fg=TEXT,
+                          bd=0, font=FONT, anchor="w", cursor="hand2",
+                          activebackground=ACCENT, activeforeground=BG,
+                          command=lambda n=name: select(n))
+            b.pack(fill="x", ipady=6)
+            btns[name] = b
+
+        select("Aparencia")
 
     # ---- Central de Programas ----------------------------------------------
     def open_software():
