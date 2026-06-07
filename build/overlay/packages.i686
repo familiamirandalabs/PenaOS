@@ -1,0 +1,42 @@
+# ============================================================================
+#  packages.i686  —  pacotes do PenaOS para 32-bit (Arch Linux 32)
+# ----------------------------------------------------------------------------
+#  Mesma ideia do x86_64, MAS os pacotes vem do archlinux32.org.
+#  CUIDADO: alguns pacotes do mainline podem nao existir (ou ter outro nome)
+#  no Arch Linux 32. Os marcados com (?) precisam ser conferidos no
+#  https://www.archlinux32.org/packages/ antes do build dar certo.
+# ============================================================================
+
+# ---- nucleo ----------------------------------------------------------------
+base
+linux                 # no archlinux32 pode ser 'linux' ou 'linux-pae'
+mkinitcpio
+mkinitcpio-archiso
+syslinux              # 32-bit ainda da boot por BIOS/syslinux (igual x86_64)
+
+# ---- chave de assinatura do Arch Linux 32 (essencial) ----------------------
+archlinux32-keyring
+
+# ---- area de trabalho ------------------------------------------------------
+python
+tk
+xorg-server
+xorg-xinit
+xorg-xrandr
+xorg-xsetroot
+openbox
+xf86-video-vesa
+xf86-video-fbdev
+xterm
+
+# ---- otimizacao pouca RAM (faz MUITO sentido em PC velho 32-bit) -----------
+zram-generator        # (?) conferir no archlinux32
+
+# ---- navegador proprio (webkit) --------------------------------------------
+webkit2gtk-4.1        # (?) pode nao existir no archlinux32 — conferir!
+python-gobject
+gtk3
+
+# ---- fontes ----------------------------------------------------------------
+ttf-dejavu
+xorg-fonts-misc

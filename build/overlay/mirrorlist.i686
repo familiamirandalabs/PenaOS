@@ -1,0 +1,11 @@
+################################################################################
+# PenaOS — mirrors do pacman (i686, Arch Linux 32)
+# ----------------------------------------------------------------------------
+# ATENCAO: o Arch mainline NAO tem mais i686 (saiu em 2017). Estes mirrors sao
+# do projeto Arch Linux 32 (archlinux32.org), que mantem o 32-bit vivo.
+# Formato do servidor aqui e  $arch/$repo  (diferente do mainline!).
+# Precisa tambem do pacote/keyring 'archlinux32-keyring' pra validar assinaturas.
+################################################################################
+Server = https://mirror.archlinux32.org/$arch/$repo
+Server = https://de.mirror.archlinux32.org/$arch/$repo
+Server = https://am.mirror.archlinux32.org/$arch/$repo

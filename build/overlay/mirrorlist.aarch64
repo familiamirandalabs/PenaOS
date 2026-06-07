@@ -1,0 +1,11 @@
+################################################################################
+# PenaOS — mirrors do pacman (aarch64, Arch Linux ARM)
+# ----------------------------------------------------------------------------
+# ATENCAO: ARM usa o projeto Arch Linux ARM (archlinuxarm.org), repos proprios.
+# Formato do servidor:  $arch/$repo. Keyring: 'archlinuxarm-keyring'.
+# IMPORTANTE: ARM NAO da boot por BIOS/syslinux. O modelo da ALARM e gravar um
+# rootfs no cartao SD com boot por U-Boot/UEFI especifico da placa (RPi, etc).
+# Por isso o build de aarch64 NAO sai como ISO live — vira um tarball de rootfs.
+################################################################################
+Server = http://mirror.archlinuxarm.org/$arch/$repo
+Server = http://br.mirror.archlinuxarm.org/$arch/$repo

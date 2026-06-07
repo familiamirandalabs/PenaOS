@@ -1,0 +1,41 @@
+# ============================================================================
+#  packages.x86_64  —  lista de pacotes do PenaOS (Estagio 3 - GUI)
+# ----------------------------------------------------------------------------
+#  Regra de ouro: so entra o ESSENCIAL. Cada pacote = ISO maior.
+# ============================================================================
+
+# ---- nucleo do sistema ------------------------------------------------------
+base                  # minimo Linux (bash, coreutils, systemd...)
+linux                 # kernel (o maior item, inevitavel)
+mkinitcpio            # monta o initramfs
+mkinitcpio-archiso    # ganchos que fazem a ISO "live" dar boot
+syslinux              # carregador de boot BIOS (VirtualBox)
+
+# ---- Python + Tkinter (area de trabalho) ------------------------------------
+python                # roda pena_shell.py
+tk                    # backend Tcl/Tk para Tkinter (stdlib do Python)
+
+# ---- X11 (servidor grafico) -------------------------------------------------
+xorg-server           # servidor X (display grafico)
+xorg-xinit            # startx / xinit (iniciar sessao X)
+xorg-xrandr           # ajustar resolucao (ajuda em VM)
+xorg-xsetroot         # cor de fundo / cursor da raiz do X
+
+# ---- Gerenciador de janelas -------------------------------------------------
+openbox               # WM leve: move/redimensiona/alt-tab das janelas reais
+xf86-video-vesa       # driver VESA generico (funciona em qualquer VM)
+xf86-video-fbdev      # driver framebuffer (fallback ainda mais basico)
+xterm                 # terminal dentro da GUI
+
+# ---- Navegador proprio (pena_browser.py) ------------------------------------
+# Nosso mini-navegador em Python+WebKitGTK, com redirect YouTube->Invidious.
+webkit2gtk-4.1        # motor de render (mesmo do Safari/GNOME Web), sem o peso
+python-gobject        # bindings: Python conversa com GTK/WebKit
+gtk3                  # toolkit grafico do navegador (janela, botoes, barra)
+
+# ---- Otimizacao pra pouca RAM (POTATO de 500MB) -----------------------------
+zram-generator        # cria swap comprimido na RAM (zstd) -> +memoria de graca
+
+# ---- Fontes (SEM ISSO o X sobe mas Tkinter/xterm QUEBRAM) -------------------
+ttf-dejavu            # fonte 'Monospace' (fontconfig) que a GUI usa
+xorg-fonts-misc       # fonte bitmap 'fixed' (fallback do X/xterm)

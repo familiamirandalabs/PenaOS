@@ -1,0 +1,45 @@
+# ============================================================================
+#  packages.aarch64  —  pacotes do PenaOS para ARM 64-bit (Arch Linux ARM)
+# ----------------------------------------------------------------------------
+#  ARM e DIFERENTE: nao tem BIOS/syslinux. O boot e por U-Boot/UEFI da placa.
+#  O modelo da ALARM e gravar um ROOTFS no cartao SD, nao gerar ISO live.
+#  Por isso aqui NAO entra syslinux nem mkinitcpio-archiso.
+#  O kernel depende da placa (ex: linux-aarch64 generico, ou linux-raspberrypi).
+# ============================================================================
+
+# ---- nucleo ----------------------------------------------------------------
+base
+linux-aarch64         # kernel generico ARMv8; troque por linux-raspberrypi p/ RPi
+mkinitcpio
+
+# ---- chave de assinatura da Arch Linux ARM (essencial) ---------------------
+archlinuxarm-keyring
+
+# ---- bootloader ARM (depende da placa) -------------------------------------
+# uboot-* especifico da placa OU um grub/systemd-boot UEFI. Deixe comentado e
+# escolha conforme o alvo (RPi3/4, PinebookPro, generico UEFI, etc):
+# uboot-raspberrypi
+# grub
+
+# ---- area de trabalho ------------------------------------------------------
+python
+tk
+xorg-server
+xorg-xinit
+xorg-xrandr
+xorg-xsetroot
+openbox
+xf86-video-fbdev      # em ARM/VM o fbdev costuma ser o caminho seguro
+xterm
+
+# ---- otimizacao pouca RAM --------------------------------------------------
+zram-generator
+
+# ---- navegador proprio (webkit) --------------------------------------------
+webkit2gtk-4.1
+python-gobject
+gtk3
+
+# ---- fontes ----------------------------------------------------------------
+ttf-dejavu
+xorg-fonts-misc

@@ -1,0 +1,13 @@
+{
+  "os_name": "PenaOS",
+  "version": "0.1.1-stage3",
+  "theme": "claro",
+  "wallpaper_pattern": "pontos",
+  "taskbar_position": "embaixo",
+  "show_clock": true,
+  "clock_24h": true,
+  "language": "pt-BR",
+  "telemetry": false,
+  "power_profile": "economia",
+  "accent": "ciano"
+}

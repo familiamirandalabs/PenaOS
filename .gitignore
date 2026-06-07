@@ -1,0 +1,20 @@
+# --- build artefacts (pesados, gerados; nao versionar) ---
+build/work/
+build/out/
+build/tmp/
+*.iso
+*.log
+
+# --- python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- config do usuario (gerado em runtime) ---
+.config/penaos/
+
+# --- segredos (NUNCA versionar) ---
+secrets.h
+*.key
+*.pem
+.env

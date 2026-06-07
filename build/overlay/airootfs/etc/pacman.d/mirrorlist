@@ -1,0 +1,15 @@
+################################################################################
+# PenaOS — lista de mirrors do pacman (live ISO)
+# ----------------------------------------------------------------------------
+# Sem isto o pacman reclama "no servers configured for repository".
+# Usamos os CDNs oficiais geo-roteados (rapidos do Brasil) + um mirror BR.
+################################################################################
+
+## CDN oficial (geo-roteado, escolhe o servidor mais perto automaticamente)
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch
+
+## Brasil
+Server = https://mirror.ufam.edu.br/archlinux/$repo/os/$arch
+Server = https://archlinux.c3sl.ufpr.br/$repo/os/$arch
+Server = https://br.mirror.archlinux-br.org/$repo/os/$arch

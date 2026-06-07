@@ -1,0 +1,10 @@
+# ============================================================================
+#  autostart do Openbox — roda quando a sessao grafica do PenaOS sobe
+# ============================================================================
+
+# fundo azul-marinho do PenaOS + cursor seta
+xsetroot -solid "#16213C" &
+xsetroot -cursor_name left_ptr &
+
+# painel/launcher do PenaOS (logo, menu, relogio, atalhos)
+python3 /opt/penaos/pena_shell.py &

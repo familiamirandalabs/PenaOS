@@ -1,0 +1,10 @@
+NAME="PenaOS"
+PRETTY_NAME="PenaOS 0.1.1 (Estagio 3 - GUI)"
+ID=penaos
+ID_LIKE=arch
+VERSION="0.1.1-stage3-gui"
+VERSION_ID="0.1.1"
+BUILD_ID=rolling
+ANSI_COLOR="0;36"
+HOME_URL="https://github.com/familiamirandalabs"
+LOGO=penaos
