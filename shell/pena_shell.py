@@ -19,6 +19,7 @@
 import os
 import json
 import time
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -98,6 +99,39 @@ def request_shutdown():
         SHUTDOWN_SENTINEL.write_text("desligar")
     except Exception:
         pass
+
+
+# ============================================================================
+#  Gerenciador de pacotes — funciona tanto na base Arch (pacman) quanto na
+#  base Debian (apt). A Central de Programas usa isto pra instalar DE VERDADE.
+#  Cada app do catalogo guarda o nome do pacote em CADA base; aqui a gente
+#  detecta qual base e a do sistema e monta o comando certo.
+# ============================================================================
+def detect_pkg_manager():
+    """Retorna 'apt', 'pacman' ou None (se nao reconhecer a base)."""
+    if shutil.which("apt-get") or shutil.which("apt"):
+        return "apt"
+    if shutil.which("pacman"):
+        return "pacman"
+    return None
+
+
+def pkg_install_cmd(pkgmap):
+    """Monta o comando de instalacao pro gerenciador detectado.
+    pkgmap: dict tipo {"apt": "nome-deb", "pacman": "nome-arch"} ou uma str
+    (mesmo nome nas duas bases). Retorna (mgr, pkg, comando) ou (mgr, None, None)
+    se o app nao existir naquela base."""
+    mgr = detect_pkg_manager()
+    if isinstance(pkgmap, str):
+        pkgmap = {"apt": pkgmap, "pacman": pkgmap}
+    pkg = pkgmap.get(mgr) if mgr else None
+    if not mgr or not pkg:
+        return mgr, pkg, None
+    if mgr == "apt":
+        cmd = f"apt-get update && apt-get install -y {pkg}"
+    else:  # pacman
+        cmd = f"pacman -Sy --needed --noconfirm {pkg}"
+    return mgr, pkg, cmd
 
 
 # ============================================================================
@@ -325,21 +359,24 @@ def run_gui():
         body = app_window("software", "Central de Programas", 500, 400)
         if body is None:
             return
+        # cada item: (nome, descricao, {apt:..., pacman:...})  — nomes por base
         catalog = [
-            ("Firefox",     "Outro navegador (pesado)", "firefox"),
-            ("Falkon",      "Navegador leve (Qt)",      "falkon"),
-            ("NetSurf",     "Navegador minusculo",      "netsurf"),
-            ("Gedit",       "Editor de texto",          "gedit"),
-            ("LibreOffice", "Documentos e planilhas",   "libreoffice-fresh"),
-            ("GIMP",        "Editar imagens",           "gimp"),
-            ("VLC",         "Videos e musicas",         "vlc"),
-            ("Wine",        "Programas do Windows",     "wine"),
-            ("Winetricks",  "Ajustes pro Wine",         "winetricks"),
-            ("Arduino IDE", "Programar o robozinho",    "arduino-ide"),
+            ("Firefox",     "Outro navegador (pesado)", {"apt": "firefox-esr",        "pacman": "firefox"}),
+            ("Falkon",      "Navegador leve (Qt)",      {"apt": "falkon",             "pacman": "falkon"}),
+            ("NetSurf",     "Navegador minusculo",      {"apt": "netsurf-gtk",        "pacman": "netsurf"}),
+            ("Gedit",       "Editor de texto",          {"apt": "gedit",              "pacman": "gedit"}),
+            ("ONLYOFFICE",  "Office (compat. MS, leve)", {"apt": "onlyoffice-desktopeditors", "pacman": "onlyoffice-bin"}),
+            ("LibreOffice", "Documentos e planilhas",   {"apt": "libreoffice",        "pacman": "libreoffice-fresh"}),
+            ("GIMP",        "Editar imagens",           {"apt": "gimp",               "pacman": "gimp"}),
+            ("VLC",         "Videos e musicas",         {"apt": "vlc",                "pacman": "vlc"}),
+            ("Wine",        "Programas do Windows",     {"apt": "wine",               "pacman": "wine"}),
+            ("Winetricks",  "Ajustes pro Wine",         {"apt": "winetricks",         "pacman": "winetricks"}),
+            ("Arduino IDE", "Programar o robozinho",    {"apt": "arduino",            "pacman": "arduino-ide"}),
         ]
+        mgr = detect_pkg_manager()
         tk.Label(body, text="Clique duas vezes para instalar de verdade.",
                  bg=BG2, fg=ACCENT, font=FONT_B).pack(anchor="w")
-        tk.Label(body, text="(abre um terminal mostrando o download)",
+        tk.Label(body, text=f"(base detectada: {mgr or 'desconhecida'} — abre um terminal mostrando o download)",
                  bg=BG2, fg=TEXT_DIM, font=FONT_SM).pack(anchor="w", pady=(0, 6))
 
         lbf = tk.Frame(body, bg=BG2); lbf.pack(fill="both", expand=True)
@@ -358,16 +395,23 @@ def run_gui():
             sel = lb.curselection()
             if not sel:
                 return
-            name, _, pkg = catalog[sel[0]]
+            name, _, pkgmap = catalog[sel[0]]
+            mgr2, pkg, base_cmd = pkg_install_cmd(pkgmap)
+            if base_cmd is None:
+                messagebox.showinfo(
+                    "Indisponivel",
+                    f"'{name}' nao esta disponivel nesta base "
+                    f"({mgr2 or 'desconhecida'}) ainda.")
+                return
             if not messagebox.askyesno(
                     "Instalar " + name,
                     f"Instalar '{name}' agora?\n\npacote: {pkg}\n\n"
                     "Vai baixar da internet (precisa estar conectado)."):
                 return
             status.set(f"Instalando {name}... (veja o terminal que abriu)")
-            # roda pacman num xterm pra criança ver o progresso; pausa no fim.
-            cmd = ("pacman -Sy --needed --noconfirm %s; "
-                   "echo; echo '--- terminou. ENTER pra fechar ---'; read _" % pkg)
+            # roda o gerenciador num xterm pra criança ver o progresso; pausa no fim.
+            cmd = (base_cmd +
+                   "; echo; echo '--- terminou. ENTER pra fechar ---'; read _")
             if shutil.which("xterm"):
                 subprocess.Popen([
                     "xterm", "-title", "Instalando " + name,
@@ -633,14 +677,15 @@ def run_tui():
         def __init__(self):
             super().__init__("Central de Programas", "[v]")
             self.catalog = [
-                ("Firefox",     "Outro navegador (pesado)", "firefox"),
-                ("Gedit",       "Editor de texto", "gedit"),
-                ("LibreOffice", "Docs e planilhas", "libreoffice-fresh"),
-                ("GIMP",        "Editar imagens", "gimp"),
-                ("VLC",         "Videos e musicas", "vlc"),
-                ("Wine",        "Programas Windows", "wine"),
-                ("Winetricks",  "Ajustes pro Wine", "winetricks"),
-                ("Arduino IDE", "Programar robo", "arduino-ide"),
+                ("Firefox",     "Outro navegador (pesado)", {"apt": "firefox-esr", "pacman": "firefox"}),
+                ("Gedit",       "Editor de texto", {"apt": "gedit", "pacman": "gedit"}),
+                ("ONLYOFFICE",  "Office (compat. MS)", {"apt": "onlyoffice-desktopeditors", "pacman": "onlyoffice-bin"}),
+                ("LibreOffice", "Docs e planilhas", {"apt": "libreoffice", "pacman": "libreoffice-fresh"}),
+                ("GIMP",        "Editar imagens", {"apt": "gimp", "pacman": "gimp"}),
+                ("VLC",         "Videos e musicas", {"apt": "vlc", "pacman": "vlc"}),
+                ("Wine",        "Programas Windows", {"apt": "wine", "pacman": "wine"}),
+                ("Winetricks",  "Ajustes pro Wine", {"apt": "winetricks", "pacman": "winetricks"}),
+                ("Arduino IDE", "Programar robo", {"apt": "arduino", "pacman": "arduino-ide"}),
             ]
             self.message = ""
         def draw(self, win, y0, x0, h, w, cfg):
@@ -665,11 +710,15 @@ def run_tui():
             elif key == 27: return "close"
             return None
         def _install(self, cfg):
-            name, _, pkg = self.catalog[self.cursor]
-            # sai do curses, roda o pacman vendo o progresso, e volta
+            name, _, pkgmap = self.catalog[self.cursor]
+            mgr, pkg, base_cmd = pkg_install_cmd(pkgmap)
+            if base_cmd is None:
+                self.message = "'%s' nao existe na base %s." % (name, mgr or "?")
+                return
+            # sai do curses, roda o gerenciador vendo o progresso, e volta
             curses.def_prog_mode(); curses.endwin()
-            os.system("clear; pacman -Sy --needed --noconfirm %s; "
-                      "echo; read -p '--- ENTER pra voltar ---' _" % pkg)
+            os.system("clear; %s; "
+                      "echo; read -p '--- ENTER pra voltar ---' _" % base_cmd)
             curses.reset_prog_mode(); curses.curs_set(0)
             self.message = "Tentou instalar '%s' (pacote: %s)." % (name, pkg)
 
