@@ -151,6 +151,12 @@ sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen || true
 locale-gen || true
 # root sem senha (live; o autologin do tty1 sobe a area de trabalho)
 passwd -d root || true
+# REDE DE SEGURANCA: permite login com senha VAZIA (so apertar Enter). Assim,
+# se o autologin falhar por qualquer motivo, ninguem fica trancado pra fora.
+# (o Debian as vezes NAO traz 'nullok' por padrao -> login sem senha e recusado)
+if [ -f /etc/pam.d/common-auth ] && ! grep -q 'pam_unix.so.*nullok' /etc/pam.d/common-auth; then
+    sed -i '/pam_unix\.so/ s/$/ nullok/' /etc/pam.d/common-auth
+fi
 # NAO roda 'apt-get clean': mantemos os .debs no cache (bind-mount).
 
 # SANIDADE: se o /sbin/init (systemd) nao ficou direito, a ISO daria
