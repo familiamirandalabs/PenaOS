@@ -13,8 +13,14 @@
 live-boot
 systemd-sysv
 
-# ---- servidor grafico (minimo, drivers de VM) ------------------------------
+# ---- servidor grafico (minimo, varios drivers pra "funcionar em tudo") -----
+#  O X escolhe sozinho o melhor driver de cada maquina. Instalamos varios pra
+#  cobrir: VirtualBox (VMSVGA -> vmware), VMware (vmware), PCs reais antigos
+#  e 32-bit (vesa/fbdev) e PCs com video moderno (modesetting, ja vem no core).
+#  SEM o 'vmware' aqui, o VirtualBox cai num fallback que redesenha errado e
+#  deixa as BORDAS das janelas picotadas (-----_----___----).
 xserver-xorg-core
+xserver-xorg-video-vmware
 xserver-xorg-video-vesa
 xserver-xorg-video-fbdev
 xserver-xorg-input-libinput
