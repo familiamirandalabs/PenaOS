@@ -2,6 +2,8 @@
 build/work/
 build/out/
 build/tmp/
+build/debian/work/
+build/debian/lb/
 *.iso
 *.log
 

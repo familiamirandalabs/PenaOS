@@ -6,151 +6,226 @@
 #  (amd64/i386/armhf/arm64) num ecossistema so — sem precisar de archlinux32
 #  nem Arch Linux ARM (projetos terceiros). Perfeito pro objetivo do PenaOS.
 #
-#  FERRAMENTA: live-build (a oficial do Debian pra ISO live). Ela cuida de
-#  debootstrap + squashfs + initramfs (live-boot) + bootloader sozinha.
+#  POR QUE *NAO* O LIVE-BUILD: o live-build (comando 'lb') e a ferramenta
+#  oficial do Debian pra ISO live, MAS ele nao esta empacotado pro Arch (nem no
+#  repo oficial, nem no AUR). Como a maquina de build aqui e Arch, montamos a
+#  ISO "na mao" com ferramentas que o Arch TEM:
+#     debootstrap   -> baixa um Debian minimo (o rootfs)
+#     chroot + apt  -> instala os pacotes DENTRO desse rootfs
+#     mksquashfs    -> comprime o rootfs nun unico arquivo (filesystem.squashfs)
+#     grub-mkrescue -> gera a ISO bootavel (BIOS + UEFI), hibrida (pendrive tb)
+#  O 'apt' so roda DENTRO do chroot Debian, nunca no host Arch.
 #
 #  REAPROVEITA TUDO: o mesmo overlay do desktop (Openbox, .xinitrc, painel
-#  pena_shell.py, navegador pena_browser.py, zram, sysctl) — eles sao Python
-#  e arquivos de config, nao dependem da base. So a "como montar a imagem"
-#  muda de archiso pra live-build.
+#  pena_shell.py, navegador pena_browser.py, zram, sysctl).
 #
-#  IMPORTANTE: voce NAO precisa de 'apt' no host. O live-build (comando 'lb')
-#  baixa o Debian sozinho (via debootstrap). Ele roda tanto no Debian quanto
-#  no Arch — so o nome do pacote da ferramenta muda. O 'apt' so existe DENTRO
-#  da ISO Debian depois de pronta.
-#
-#  COMO USAR:
-#    # 1) instalar a ferramenta (uma vez):
-#    #   Arch:          sudo pacman -S debootstrap   &&   yay -S live-build  (AUR)
-#    #   Debian/Ubuntu: sudo apt install live-build
+#  COMO USAR (no Arch):
+#    # 1) ferramentas (uma vez):
+#    sudo pacman -S debootstrap debian-archive-keyring squashfs-tools \
+#                   libisoburn grub mtools
 #    # 2) rodar como root:
 #    sudo ~/Documents/penaos/build/build_penaos_debian.sh
 #    # multi-arch:  PENA_ARCH=i386 sudo ./build_penaos_debian.sh
-#    # 3) a ISO sai em:  build/debian/lb/live-image-*.hybrid.iso
+#    # 3) a ISO sai em:  build/debian/work/penaos-debian-<arch>.iso
+#
+#  AVISO HONESTO: montar Debian live a partir do Arch funciona, mas tem varios
+#  pontos que so da pra validar rodando (debootstrap, initramfs do live-boot,
+#  grub-mkrescue). Se travar, o erro aparece na tela — me manda que eu destravo.
 # ============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(dirname "$SCRIPT_DIR")"
-SHARED_OVERLAY="$SCRIPT_DIR/overlay/airootfs"     # desktop compartilhado c/ Arch
-DEB_DIR="$SCRIPT_DIR/debian"                       # config especifica Debian
+SHARED_OVERLAY="$SCRIPT_DIR/overlay/airootfs"      # desktop compartilhado c/ Arch
+DEB_DIR="$SCRIPT_DIR/debian"                        # config especifica Debian
 PKG_LIST="$DEB_DIR/packages.list.chroot"
 SHELL_SRC="$PROJ_DIR/shell/pena_shell.py"
 BROWSER_SRC="$PROJ_DIR/shell/pena_browser.py"
 RUNEXE_SRC="$PROJ_DIR/shell/pena_run_exe.py"
-LB="$DEB_DIR/lb"                                    # diretorio de trabalho do live-build
 
 # distribuicao Debian estavel atual
 DIST="${PENA_DIST:-bookworm}"
 ARCH="${PENA_ARCH:-amd64}"
+MIRROR="${PENA_MIRROR:-http://deb.debian.org/debian/}"
 
-say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
-err() { printf '\n\033[1;31mERRO: %s\033[0m\n' "$*" >&2; exit 1; }
+WORK="$DEB_DIR/work"
+ROOTFS="$WORK/rootfs"
+ISODIR="$WORK/iso"
+OUT="$WORK/penaos-debian-$ARCH.iso"
+
+say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+err()  { printf '\n\033[1;31mERRO: %s\033[0m\n' "$*" >&2; exit 1; }
+warn() { printf '\033[1;33m  ! %s\033[0m\n' "$*" >&2; }
 
 # ---- checagens --------------------------------------------------------------
 [[ $EUID -eq 0 ]] || err "rode como root:  sudo $0"
-command -v lb >/dev/null 2>&1 || err "falta o live-build (comando 'lb').
-  Arch:           sudo pacman -S debootstrap  &&  yay -S live-build   (AUR)
-  Debian/Ubuntu:  sudo apt install live-build
-  (voce NAO precisa de apt no host: o live-build baixa o Debian via debootstrap)"
-command -v debootstrap >/dev/null 2>&1 || err "falta o debootstrap (o live-build usa ele).
-  Arch:           sudo pacman -S debootstrap
-  Debian/Ubuntu:  sudo apt install debootstrap"
+
+need() { command -v "$1" >/dev/null 2>&1 || err "falta '$1'. Instale no Arch:
+  sudo pacman -S debootstrap debian-archive-keyring squashfs-tools libisoburn grub mtools"; }
+need debootstrap
+need mksquashfs
+need xorriso
+need grub-mkrescue
+
+# keyring do Debian (senao o debootstrap recusa as assinaturas)
+KEYRING="/usr/share/keyrings/debian-archive-keyring.gpg"
+[[ -f "$KEYRING" ]] || err "falta a chave do Debian: $KEYRING
+  Arch:  sudo pacman -S debian-archive-keyring"
+
 [[ -f "$PKG_LIST" ]]    || err "lista de pacotes nao encontrada: $PKG_LIST"
 [[ -f "$SHELL_SRC" ]]   || err "nao achei o shell: $SHELL_SRC"
 [[ -d "$SHARED_OVERLAY" ]] || err "overlay compartilhado ausente: $SHARED_OVERLAY"
 
-# ---- arquitetura: amd64/i386 = ISO BIOS; ARM = imagem diferente -------------
-BINARY_IMAGES="iso-hybrid"
+# ---- arquitetura: kernel certo por arch -------------------------------------
 case "$ARCH" in
-  amd64)
-    say "Arquitetura: amd64 (Debian) — ISO live BIOS, caminho suportado"
-    ;;
-  i386)
-    say "Arquitetura: i386 (Debian 32-bit OFICIAL) — ISO live BIOS"
-    ;;
+  amd64) KPKG="linux-image-amd64";    say "Arquitetura: amd64 (ISO BIOS+UEFI)";;
+  i386)  KPKG="linux-image-686-pae";  say "Arquitetura: i386 (Debian 32-bit oficial)";;
   armhf|arm64)
-    err "ARM ($ARCH) nao gera ISO BIOS. live-build pode montar uma imagem de
-  disco (--binary-images hdd) com U-Boot/UEFI especifico da placa, mas isso
-  e um fluxo separado (a fazer). amd64/i386 funcionam por aqui."
-    ;;
-  *)
-    err "arquitetura desconhecida: '$ARCH' (use amd64, i386, armhf, arm64)"
-    ;;
+    err "ARM ($ARCH) nao gera ISO BIOS/UEFI x86. Precisa de imagem de disco com
+  U-Boot/UEFI da placa — fluxo separado (a fazer). amd64/i386 funcionam aqui.";;
+  *) err "arquitetura desconhecida: '$ARCH' (use amd64, i386)";;
 esac
 
-# ---- area de trabalho limpa -------------------------------------------------
-say "Limpando configuracao live-build anterior"
-rm -rf "$LB"
-mkdir -p "$LB"
-cd "$LB"
+# ---- limpeza + trap pra desmontar sempre ------------------------------------
+cleanup() {
+    set +e
+    for m in dev/pts dev proc sys run; do
+        mountpoint -q "$ROOTFS/$m" && umount -lf "$ROOTFS/$m" 2>/dev/null
+    done
+}
+trap cleanup EXIT
 
-# ---- configura o live-build -------------------------------------------------
-#  --bootappend-live: 'live-config' autoconfigura; pedimos teclado BR e
-#  desligamos a criacao de usuario (nossa sessao sobe como root no tty1).
-say "Configurando o live-build (Debian $DIST / $ARCH)"
-lb config \
-    --distribution "$DIST" \
-    --architectures "$ARCH" \
-    --binary-images "$BINARY_IMAGES" \
-    --debian-installer none \
-    --apt-indices false \
-    --apt-recommends false \
-    --memtest none \
-    --firmware-binary false \
-    --firmware-chroot false \
-    --bootappend-live "boot=live components quiet splash keyboard-layouts=br locales=pt_BR.UTF-8" \
-    --iso-application "PenaOS Live" \
-    --iso-publisher "Familia Miranda; https://github.com/familiamirandalabs" \
-    --iso-volume "PENAOS"
+say "Limpando trabalho anterior"
+cleanup
+rm -rf "$WORK"
+mkdir -p "$ROOTFS" "$ISODIR/live" "$ISODIR/boot/grub"
 
-# ---- lista de pacotes -------------------------------------------------------
-mkdir -p config/package-lists
-cp "$PKG_LIST" config/package-lists/penaos.list.chroot
+# ---- 1) debootstrap: baixa um Debian minimo ---------------------------------
+say "debootstrap: baixando Debian $DIST/$ARCH (demora; baixa da internet)"
+debootstrap --arch="$ARCH" --variant=minbase \
+    --keyring="$KEYRING" \
+    "$DIST" "$ROOTFS" "$MIRROR"
 
-# ---- desktop: joga o overlay compartilhado dentro da imagem -----------------
-#  includes.chroot = arquivos que vao pro / da imagem (igual airootfs do Arch).
-say "Aplicando o desktop do PenaOS (overlay compartilhado + painel + navegador)"
-mkdir -p config/includes.chroot
-#  copia tudo do overlay MENOS o que e especifico do Arch (pacman)
-rsync -a --exclude 'etc/pacman.d' "$SHARED_OVERLAY/." config/includes.chroot/
-#  injeta painel e navegador
-mkdir -p config/includes.chroot/opt/penaos
-cp "$SHELL_SRC"   config/includes.chroot/opt/penaos/pena_shell.py
-[[ -f "$BROWSER_SRC" ]] && cp "$BROWSER_SRC" config/includes.chroot/opt/penaos/pena_browser.py
-[[ -f "$RUNEXE_SRC" ]]  && cp "$RUNEXE_SRC"  config/includes.chroot/opt/penaos/pena_run_exe.py
+# ---- 2) prepara o chroot ----------------------------------------------------
+say "Preparando o chroot (apt sources, montagens, rede)"
+cat > "$ROOTFS/etc/apt/sources.list" <<EOF
+deb $MIRROR $DIST main contrib non-free-firmware
+deb $MIRROR $DIST-updates main contrib non-free-firmware
+deb http://security.debian.org/debian-security $DIST-security main contrib non-free-firmware
+EOF
+cp /etc/resolv.conf "$ROOTFS/etc/resolv.conf"
+echo "penaos" > "$ROOTFS/etc/hostname"
 
-# ---- ajusta o os-release pra dizer "parecido com Debian" --------------------
-OSREL="config/includes.chroot/etc/os-release"
-if [[ -f "$OSREL" ]]; then
-    sed -i 's/^ID_LIKE=.*/ID_LIKE=debian/' "$OSREL" || true
-fi
+mount -t proc  proc   "$ROOTFS/proc"
+mount -t sysfs sys    "$ROOTFS/sys"
+mount --bind   /dev   "$ROOTFS/dev"
+mount --bind   /dev/pts "$ROOTFS/dev/pts"
 
-# ---- hook: liga autologin e zram dentro do chroot ---------------------------
-#  (o overlay ja traz o drop-in de autologin do getty@tty1 e o
-#   zram-generator.conf; aqui so garantimos que os servicos certos rodem.)
-mkdir -p config/hooks/live
-cat > config/hooks/live/0100-penaos.hook.chroot <<'HOOK'
+# nao deixa daemons subirem durante a instalacao no chroot
+cat > "$ROOTFS/usr/sbin/policy-rc.d" <<'EOF'
 #!/bin/sh
-set -e
-# habilita o swap comprimido (systemd-zram-generator le /etc/systemd/zram-generator.conf)
+exit 101
+EOF
+chmod +x "$ROOTFS/usr/sbin/policy-rc.d"
+
+# ---- 3) instala pacotes DENTRO do chroot (via apt) --------------------------
+#  le a lista (tira comentarios e linhas vazias) e junta numa linha so.
+PKGS="$(grep -vE '^\s*#|^\s*$' "$PKG_LIST" | tr '\n' ' ')"
+say "Instalando pacotes no chroot (kernel + $(echo "$PKGS" | wc -w) da lista)"
+chroot "$ROOTFS" /usr/bin/env -i \
+    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+    DEBIAN_FRONTEND=noninteractive LANG=C \
+    bash -e <<CHROOT
+apt-get update
+# kernel + base do live (live-boot monta a squashfs; initramfs-tools faz o initrd)
+apt-get install -y --no-install-recommends \
+    $KPKG live-boot live-config live-config-systemd initramfs-tools \
+    locales keyboard-configuration console-setup
+# os pacotes do PenaOS (X, openbox, python, webkit, gstreamer, zram, fontes...)
+apt-get install -y --no-install-recommends $PKGS
+# locale pt_BR
+sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen || true
+locale-gen || true
+# root sem senha (live; o autologin do tty1 sobe a area de trabalho)
+passwd -d root || true
+apt-get clean
+CHROOT
+
+# ---- 4) overlay do desktop dentro do rootfs ---------------------------------
+say "Aplicando o desktop do PenaOS (overlay + painel + navegador + abridor .exe)"
+rsync -a --exclude 'etc/pacman.d' "$SHARED_OVERLAY/." "$ROOTFS/"
+mkdir -p "$ROOTFS/opt/penaos"
+cp "$SHELL_SRC"   "$ROOTFS/opt/penaos/pena_shell.py"
+[[ -f "$BROWSER_SRC" ]] && cp "$BROWSER_SRC" "$ROOTFS/opt/penaos/pena_browser.py"
+[[ -f "$RUNEXE_SRC" ]]  && cp "$RUNEXE_SRC"  "$ROOTFS/opt/penaos/pena_run_exe.py"
+
+# os-release: marca como "parecido com Debian"
+[[ -f "$ROOTFS/etc/os-release" ]] && \
+    sed -i 's/^ID_LIKE=.*/ID_LIKE=debian/' "$ROOTFS/etc/os-release" || true
+
+# ---- 5) habilita servicos do PenaOS (zram + autologin) ----------------------
+say "Habilitando autologin do tty1 e o swap comprimido (zram)"
+chroot "$ROOTFS" /usr/bin/env -i \
+    HOME=/root PATH=/usr/sbin:/usr/bin:/sbin:/bin LANG=C bash -e <<'CHROOT'
+# o drop-in de autologin do getty@tty1 ja veio do overlay (includes do desktop)
 systemctl enable systemd-zram-setup@zram0.service 2>/dev/null || true
-# o autologin do root no tty1 vem do drop-in do overlay (includes.chroot).
-HOOK
-chmod +x config/hooks/live/0100-penaos.hook.chroot
+systemctl set-default multi-user.target 2>/dev/null || true
+# regenera o initramfs JA com os ganchos do live-boot
+update-initramfs -u || update-initramfs -c -k all || true
+CHROOT
 
-# ---- constroi! --------------------------------------------------------------
-say "Construindo a ISO Debian (baixa pacotes; demora alguns minutos)"
-lb build
+# ---- 6) limpa e desmonta o chroot -------------------------------------------
+rm -f "$ROOTFS/usr/sbin/policy-rc.d"
+rm -f "$ROOTFS/etc/resolv.conf"
+cleanup
 
-# ---- resultado --------------------------------------------------------------
-ISO=$(ls -1 "$LB"/live-image-*.iso 2>/dev/null | head -1 || true)
-[[ -n "$ISO" ]] || err "a ISO nao foi criada — veja o log do live-build acima"
+# ---- 7) kernel + initrd pro lado da ISO -------------------------------------
+say "Copiando kernel e initrd pra arvore da ISO"
+VMLINUZ="$(ls -1 "$ROOTFS"/boot/vmlinuz-* 2>/dev/null | sort -V | tail -1 || true)"
+INITRD="$(ls -1 "$ROOTFS"/boot/initrd.img-* 2>/dev/null | sort -V | tail -1 || true)"
+[[ -n "$VMLINUZ" && -n "$INITRD" ]] || err "kernel/initrd nao encontrados em $ROOTFS/boot"
+cp "$VMLINUZ" "$ISODIR/live/vmlinuz"
+cp "$INITRD"  "$ISODIR/live/initrd"
+
+# ---- 8) squashfs do rootfs (sem o /boot, que ja foi pra ISO) ----------------
+say "Comprimindo o rootfs (mksquashfs — demora e usa CPU)"
+mksquashfs "$ROOTFS" "$ISODIR/live/filesystem.squashfs" \
+    -comp zstd -Xcompression-level 19 -noappend \
+    -e boot -wildcards -e 'proc/*' -e 'sys/*' -e 'dev/pts/*'
+
+# ---- 9) configura o GRUB da ISO ---------------------------------------------
+say "Escrevendo o menu do GRUB"
+BOOTAPP="boot=live components quiet splash locales=pt_BR.UTF-8 keyboard-layouts=br"
+cat > "$ISODIR/boot/grub/grub.cfg" <<EOF
+set default=0
+set timeout=5
+menuentry "PenaOS Live ($ARCH)" {
+    linux  /live/vmlinuz $BOOTAPP
+    initrd /live/initrd
+}
+menuentry "PenaOS Live (modo seguro: sem aceleracao)" {
+    linux  /live/vmlinuz $BOOTAPP nomodeset
+    initrd /live/initrd
+}
+EOF
+
+# ---- 10) monta a ISO hibrida (BIOS + UEFI) ----------------------------------
+say "Gerando a ISO com grub-mkrescue"
+grub-mkrescue \
+    --volid PENAOS \
+    -o "$OUT" "$ISODIR" \
+    -- -volid PENAOS 2>/dev/null \
+  || grub-mkrescue --volid PENAOS -o "$OUT" "$ISODIR"
+
+[[ -f "$OUT" ]] || err "a ISO nao foi criada — veja o log acima"
 
 # devolve o arquivo pro usuario (saiu como root)
 if [[ -n "${SUDO_USER:-}" ]]; then
-    chown "$SUDO_USER":"$SUDO_USER" "$ISO" || true
+    chown "$SUDO_USER":"$SUDO_USER" "$OUT" 2>/dev/null || true
 fi
 
 say "PRONTO! ISO Debian do PenaOS:"
-ls -lh "$ISO"
+ls -lh "$OUT"
+echo
+echo "  Testar:  qemu-system-x86_64 -m 768 -cdrom \"$OUT\""
+echo "  (ou crie uma VM no VirtualBox apontando pra essa ISO)"
