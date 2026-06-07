@@ -54,9 +54,9 @@ ISODIR="$WORK/iso"
 OUT="$WORK/penaos-debian-$ARCH.iso"
 
 # cache (sobrevive entre builds; NAO e apagado com o $WORK) — evita rebaixar
-# 1 GB toda vez. base-*.tar.gz = Debian minimo; apt-* = .debs ja baixados.
+# 1 GB toda vez. debs-* = .debs do debootstrap; apt-* = .debs do apt no chroot.
 DEB_CACHE="$DEB_DIR/cache"
-BASE_TAR="$DEB_CACHE/base-$DIST-$ARCH.tar.gz"
+BOOT_CACHE="$DEB_CACHE/debs-$DIST-$ARCH"
 APT_CACHE="$DEB_CACHE/apt-$DIST-$ARCH"
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -107,19 +107,16 @@ rm -rf "$WORK"
 mkdir -p "$ROOTFS" "$ISODIR/live" "$ISODIR/boot/grub"
 
 # ---- 1) debootstrap: baixa um Debian minimo (com cache) ---------------------
-mkdir -p "$DEB_CACHE"
-if [[ -f "$BASE_TAR" ]]; then
-    say "debootstrap: reaproveitando a base do cache ($BASE_TAR)"
-    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
-        --unpack-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
-else
-    say "debootstrap: baixando Debian $DIST/$ARCH (1a vez; salva cache pra proxima)"
-    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
-        --make-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
-    # --make-tarball SO baixa e empacota; agora desempacota de fato no ROOTFS:
-    debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
-        --unpack-tarball="$BASE_TAR" "$DIST" "$ROOTFS" "$MIRROR"
-fi
+#  IMPORTANTE: uma extracao SO, limpa, no $ROOTFS (que acabou de ser apagado).
+#  Usamos --cache-dir pra GUARDAR os .debs baixados e nao rebaixar na proxima.
+#  (NAO usar make-tarball+unpack-tarball na mesma pasta: aquilo extrai DUAS vezes
+#   por cima, deixa o dpkg/systemd meio-configurado e o init morre no boot —
+#   foi o que causou o 'kernel panic: Attempted to kill init'.)
+mkdir -p "$BOOT_CACHE"
+say "debootstrap: montando Debian $DIST/$ARCH (.debs vem do cache se ja baixados)"
+debootstrap --arch="$ARCH" --variant=minbase --keyring="$KEYRING" \
+    --cache-dir="$BOOT_CACHE" \
+    "$DIST" "$ROOTFS" "$MIRROR"
 
 # ---- 2) prepara o chroot ----------------------------------------------------
 say "Preparando o chroot (apt sources, montagens, rede)"
@@ -178,6 +175,19 @@ locale-gen || true
 # root sem senha (live; o autologin do tty1 sobe a area de trabalho)
 passwd -d root || true
 # NAO roda 'apt-get clean' aqui: queremos manter os .debs no cache (bind-mount).
+
+# SANIDADE: se o systemd/init ficou meio-configurado, a ISO daria 'kernel panic:
+# Attempted to kill init'. Melhor o BUILD falhar aqui (com erro claro) do que
+# gerar uma ISO quebrada. /sbin/init TEM que existir e o dpkg NAO pode ter
+# pacotes pela metade.
+if ! dpkg-query -W -f='\${Status}' systemd-sysv 2>/dev/null | grep -q 'install ok installed'; then
+    echo "FATAL: systemd-sysv nao ficou instalado direito (init faltando)"; exit 2
+fi
+test -e /sbin/init || { echo "FATAL: /sbin/init nao existe"; exit 2; }
+if dpkg --audit 2>/dev/null | grep -q .; then
+    echo "FATAL: ha pacotes meio-configurados (dpkg --audit):"; dpkg --audit; exit 2
+fi
+echo "OK: systemd-sysv instalado, /sbin/init presente, dpkg integro."
 CHROOT
 
 # ---- 4) overlay do desktop dentro do rootfs ---------------------------------
