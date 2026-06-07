@@ -171,6 +171,18 @@ apt-get install -y --no-install-recommends \
     systemd-resolved sudo iproute2 ca-certificates \
     locales keyboard-configuration console-setup
 
+# --- conserta o DNS DENTRO do chroot antes do 2o apt --------------------------
+#  O postinst do systemd-resolved (instalado no bloco acima) TROCA o
+#  /etc/resolv.conf por um link -> /run/systemd/resolve/stub-resolv.conf. Dentro
+#  do chroot o daemon resolved NAO esta rodando, entao esse link aponta pro nada
+#  (DNS quebrado) e o 'apt-get install \$PKGS' falhava com:
+#    "Temporary failure resolving 'deb.debian.org'".
+#  Solucao: apaga o link morto e escreve um resolv.conf de verdade. Isso so vale
+#  durante o build; no fim (passo 6) voltamos pro link do resolved pro sistema
+#  live usar o resolved normalmente.
+rm -f /etc/resolv.conf
+printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+
 # os pacotes do PenaOS (X, openbox, python, webkit, gstreamer, zram, fontes...)
 apt-get install -y --no-install-recommends $PKGS
 
