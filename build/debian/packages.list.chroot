@@ -7,9 +7,10 @@
 # ============================================================================
 
 # ---- sistema live (boot da ISO em RAM) -------------------------------------
+#  So o live-boot (monta a squashfs no boot). NAO usamos live-config: ele cria
+#  um usuario 'user' e um autologin proprio que brigava com o nosso autologin
+#  de root no tty1 (causa da tela preta). O autologin + desktop vem do overlay.
 live-boot
-live-config
-live-config-systemd
 systemd-sysv
 
 # ---- servidor grafico (minimo, drivers de VM) ------------------------------

@@ -13,6 +13,13 @@
 if [[ "$(tty)" == "/dev/tty1" ]]; then
     rm -f /tmp/penaos-shutdown
 
+    # pista visivel: se a tela ficar PRETA depois desta linha, o travamento e
+    # no X (startx); se nunca aparecer, o autologin do root nem rodou.
+    clear
+    echo "  -(*)-  PenaOS: iniciando a area de trabalho..."
+    echo "         (se demorar muito numa tela preta, algo no X travou —"
+    echo "          aperte Ctrl+Alt+F2 pra um terminal e veja /tmp/penaos-startx.log)"
+
     # inicia o X11 com nosso xinitrc; loga tudo pra diagnostico
     startx /opt/penaos/.xinitrc -- :0 vt1 &> /tmp/penaos-startx.log
     code=$?

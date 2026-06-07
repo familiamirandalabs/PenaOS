@@ -138,8 +138,15 @@ chroot "$ROOTFS" /usr/bin/env -i \
     bash -e <<CHROOT
 apt-get update
 # kernel + base do live (live-boot monta a squashfs; initramfs-tools faz o initrd)
+#  IMPORTANTE: instalamos so o 'live-boot' (que monta a squashfs no boot).
+#  NAO instalamos 'live-config': no Debian-live ele cria um usuario 'user' e
+#  configura um autologin proprio que BRIGA com o nosso autologin de root no
+#  tty1 — resultado era tela preta (ninguem logava como root pra subir o X).
+#  Aqui o autologin vem do nosso drop-in do overlay e o desktop sobe pelo
+#  .bash_profile do root. Mais simples e previsivel.
 apt-get install -y --no-install-recommends \
-    $KPKG live-boot live-config live-config-systemd initramfs-tools \
+    $KPKG live-boot initramfs-tools \
+    dbus xserver-xorg-legacy \
     locales keyboard-configuration console-setup
 # os pacotes do PenaOS (X, openbox, python, webkit, gstreamer, zram, fontes...)
 apt-get install -y --no-install-recommends $PKGS
@@ -195,7 +202,9 @@ mksquashfs "$ROOTFS" "$ISODIR/live/filesystem.squashfs" \
 
 # ---- 9) configura o GRUB da ISO ---------------------------------------------
 say "Escrevendo o menu do GRUB"
-BOOTAPP="boot=live components quiet splash locales=pt_BR.UTF-8 keyboard-layouts=br"
+# sem 'quiet splash' de proposito: mostra as mensagens do boot (ajuda a achar
+# onde travou). Da pra por de volta depois que estiver redondo.
+BOOTAPP="boot=live components locales=pt_BR.UTF-8 keyboard-layouts=br"
 cat > "$ISODIR/boot/grub/grub.cfg" <<EOF
 set default=0
 set timeout=5
