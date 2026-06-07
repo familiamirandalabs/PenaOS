@@ -75,15 +75,26 @@ esac
 # ---- trap: desmonta o chroot ACONTECA O QUE ACONTECER -----------------------
 cleanup() {
     set +e
+    # desmonta as montagens conhecidas (mais fundo primeiro)
     for m in var/cache/apt/archives dev/pts dev proc sys run; do
         mountpoint -q "$ROOTFS/$m" && umount -lf "$ROOTFS/$m" 2>/dev/null
     done
+    # REDE DE SEGURANCA: QUALQUER montagem ainda apontando pra dentro do $WORK
+    # (sobra de um build interrompido). Sem isto, o 'rm -rf' abaixo falha em
+    # apagar o rootfs velho e o build acaba REUSANDO um rootfs sem area grafica.
+    awk -v w="$WORK/" '$2 ~ "^"w {print $2}' /proc/mounts 2>/dev/null \
+        | sort -r | while read -r mp; do umount -lf "$mp" 2>/dev/null; done
 }
 trap cleanup EXIT
 
-say "Limpando trabalho anterior"
+say "Limpando trabalho anterior (apaga o rootfs velho por completo)"
 cleanup
 rm -rf "$WORK"
+# TRAVA: se o rootfs velho NAO foi apagado (montagem presa), PARA aqui. Senao o
+# build reusaria um rootfs antigo sem GUI e geraria uma ISO 'startx not found'.
+[[ -e "$WORK" ]] && err "nao consegui apagar $WORK (montagem presa de um build anterior).
+  Rode isto e tente de novo:
+    sudo umount -lf $ROOTFS/* $ROOTFS/dev/pts 2>/dev/null; sudo rm -rf $WORK"
 mkdir -p "$ROOTFS" "$ISODIR/live" "$ISODIR/boot/grub"
 
 # ============================================================================
@@ -271,7 +282,17 @@ cp "$INITRD"  "$ISODIR/live/initrd"
 # ============================================================================
 #  8) comprime o rootfs (sem o /boot, que ja foi pra ISO)
 # ============================================================================
-say "Comprimindo o rootfs (mksquashfs — demora e usa CPU)"
+# GUARDA FINAL (cinto + suspensorio): NUNCA empacotar um rootfs sem area
+# grafica. Se chegamos aqui sem startx/Xorg/openbox, algo no passo 3 falhou
+# silenciosamente OU reusou um rootfs velho -> PARA, em vez de gerar a ISO
+# 'startx: command not found' de novo.
+for b in usr/bin/startx usr/bin/Xorg usr/bin/openbox usr/bin/python3; do
+    [[ -x "$ROOTFS/$b" ]] || err "rootfs SEM /$b -> a area grafica NAO foi instalada.
+  Me recuso a gerar uma ISO sem desktop. Apague o cache e refaca limpo:
+    sudo rm -rf '$WORK' '$DEB_CACHE'
+    sudo $0"
+done
+say "rootfs OK (startx/Xorg/openbox/python3 presentes). Comprimindo (mksquashfs)..."
 mksquashfs "$ROOTFS" "$ISODIR/live/filesystem.squashfs" \
     -comp zstd -Xcompression-level 19 -noappend \
     -e boot -wildcards -e 'proc/*' -e 'sys/*' -e 'dev/pts/*'
