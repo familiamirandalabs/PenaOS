@@ -14,8 +14,13 @@
 #      1) na hora de decidir a navegacao (decide-policy) -> pega quase tudo
 #      2) um userscript no inicio da pagina -> pega redirects via JS
 #
-#  Busca: se o que voce digitar nao for um endereco, mandamos pro DuckDuckGo
-#  Lite (HTML puro, levissimo) que ainda aceita !bangs (ex: "!w arduino").
+#  BANGS NATIVOS (novo):
+#    A gente NAO depende mais do DuckDuckGo pros !bangs — eles sao tratados
+#    aqui dentro. Digite "!yt gato" e aperte espaco: a barra vira uma PILL
+#    verde "YouTube │ gato" e a busca vai direto pro site certo. Backspace no
+#    comeco apaga a pill. Lista de bangs la embaixo em BANGS.
+#
+#  Busca normal (sem bang): vai pro DuckDuckGo Lite (HTML puro, levissimo).
 # ============================================================================
 import sys
 import urllib.parse
@@ -27,12 +32,28 @@ try:
 except ValueError:
     gi.require_version("WebKit2", "4.0")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, WebKit2, GLib  # noqa: E402
+from gi.repository import Gtk, Gdk, WebKit2, GLib  # noqa: E402
 
 # ---- configuracao -----------------------------------------------------------
 INVIDIOUS = "inv.nadeko.net"
 HOMEPAGE = "https://lite.duckduckgo.com/lite/"
-SEARCH = "https://lite.duckduckgo.com/lite/?q=%s"   # %s = termo (aceita !bangs)
+SEARCH = "https://lite.duckduckgo.com/lite/?q=%s"   # busca normal (sem bang)
+
+# ---- BANGS NATIVOS ----------------------------------------------------------
+#  chave -> (Nome bonito que aparece na pill, URL com %s no lugar do termo)
+#  O termo vai sempre urlencoded. YouTube cai no Invidious (privacidade+leveza).
+BANGS = {
+    "yt":   ("YouTube",    "https://" + INVIDIOUS + "/search?q=%s"),
+    "v":    ("YouTube",    "https://" + INVIDIOUS + "/search?q=%s"),
+    "w":    ("Wikipedia",  "https://pt.wikipedia.org/w/index.php?search=%s"),
+    "g":    ("Google",     "https://www.google.com/search?q=%s"),
+    "ddg":  ("DuckDuckGo", "https://lite.duckduckgo.com/lite/?q=%s"),
+    "gh":   ("GitHub",     "https://github.com/search?q=%s&type=repositories"),
+    "img":  ("Imagens",    "https://duckduckgo.com/?ia=images&iax=images&q=%s"),
+    "mapa": ("Mapas",      "https://www.openstreetmap.org/search?query=%s"),
+    "ml":   ("Mercado Livre",
+             "https://lista.mercadolivre.com.br/%s"),
+}
 
 # dominios do YouTube que a gente intercepta
 YT_HOSTS = {
@@ -44,8 +65,11 @@ YT_HOSTS = {
 # cores PenaOS (casa com o resto do sistema)
 CSS = b"""
 .penatop { background:#090f1e; }
-entry { background:#0d1929; color:#FAF6EE; border-radius:6px; padding:4px 8px;
-        caret-color:#3DDC97; }
+.addrbar entry { background:#0d1929; color:#FAF6EE; border-radius:6px;
+        padding:4px 8px; caret-color:#3DDC97; }
+/* a pill verde do bang (ex: "YouTube") */
+.bangpill { background:#3DDC97; color:#090f1e; border-radius:6px;
+        padding:2px 9px; margin:0 2px 0 4px; font-weight:bold; }
 button { background:#0d1929; color:#3DDC97; border:0; padding:4px 8px;
          margin:0 1px; }
 button:hover { background:#16213C; }
@@ -96,6 +120,9 @@ class PenaBrowser(Gtk.Window):
         super().__init__(title="Navegador do PenaOS")
         self.set_default_size(1000, 680)
 
+        self.active_bang = None      # chave do bang atual (ex: "yt") ou None
+        self._guard = False          # evita recursao no sinal 'changed'
+
         # tema
         prov = Gtk.CssProvider()
         prov.load_from_data(CSS)
@@ -121,10 +148,30 @@ class PenaBrowser(Gtk.Window):
         mkbtn("→", lambda *_: self.web.go_forward())   # avancar
         mkbtn("↻", lambda *_: self.web.reload())       # recarregar
 
+        # caixa de endereco = [pill do bang] + [entry], lado a lado, parecendo
+        # uma barra so. A pill so aparece quando tem bang ativo.
+        addr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        addr.get_style_context().add_class("addrbar")
+        bar.pack_start(addr, True, True, 4)
+
+        self.bang_label = Gtk.Label()
+        self.bang_label.get_style_context().add_class("bangpill")
+        self.bang_label.set_no_show_all(True)   # nao aparece no show_all()
+        addr.pack_start(self.bang_label, False, False, 0)
+
         self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("Digite um site ou uma busca (aceita !bangs)")
+        self.entry.set_placeholder_text(
+            "Site ou busca  —  dica: !yt gato, !w arduino, !g ...")
+        # lupinha no comeco da barra (igual a foto)
+        try:
+            self.entry.set_icon_from_icon_name(
+                Gtk.EntryIconPosition.PRIMARY, "system-search-symbolic")
+        except Exception:
+            pass
         self.entry.connect("activate", self.on_enter)
-        bar.pack_start(self.entry, True, True, 4)
+        self.entry.connect("changed", self.on_changed)
+        self.entry.connect("key-press-event", self.on_key)
+        addr.pack_start(self.entry, True, True, 0)
 
         mkbtn("⌂", lambda *_: self.load(HOMEPAGE))     # inicio
 
@@ -148,7 +195,7 @@ class PenaBrowser(Gtk.Window):
 
         self.web = WebKit2.WebView.new_with_user_content_manager(self.ucm)
 
-        # economia de RAM: sem cache em disco (live nao tem disco) + leve
+        # economia de RAM + codecs/video ligados (sem isto o Invidious nao toca)
         try:
             s = self.web.get_settings()
             s.set_enable_developer_extras(False)
@@ -156,6 +203,12 @@ class PenaBrowser(Gtk.Window):
             s.set_enable_offline_web_application_cache(False)
             s.set_enable_html5_database(False)
             s.set_enable_smooth_scrolling(False)
+            # --- VIDEO: o player do Invidious usa MSE (Media Source Extensions).
+            #     Sem isto o player nem aparece / da "incompatible". ---
+            s.set_enable_mediasource(True)
+            # deixa o video tocar sozinho (crianca nao precisa "destravar")
+            s.set_media_playback_requires_user_gesture(False)
+            s.set_enable_webaudio(True)
         except Exception:
             pass
 
@@ -164,6 +217,42 @@ class PenaBrowser(Gtk.Window):
         box.pack_start(self.web, True, True, 0)
 
         self.connect("destroy", Gtk.main_quit)
+
+    # ---- BANGS: pill verde -------------------------------------------------
+    def set_bang(self, key):
+        self.active_bang = key
+        self.bang_label.set_text(BANGS[key][0])
+        self.bang_label.show()
+
+    def clear_bang(self):
+        if self.active_bang is not None:
+            self.active_bang = None
+            self.bang_label.hide()
+
+    def on_changed(self, entry):
+        """Quando digita '!yt ' (com espaco), promove pra pill verde."""
+        if self._guard or self.active_bang is not None:
+            return
+        text = entry.get_text()
+        if not text.startswith("!") or " " not in text:
+            return
+        token, rest = text[1:].split(" ", 1)
+        token = token.lower()
+        if token in BANGS:
+            self._guard = True
+            self.set_bang(token)
+            entry.set_text(rest)          # so a busca fica no campo
+            entry.set_position(-1)        # cursor no fim
+            self._guard = False
+
+    def on_key(self, entry, event):
+        """Backspace no comeco da busca apaga a pill do bang."""
+        if (self.active_bang is not None
+                and event.keyval == Gdk.KEY_BackSpace
+                and entry.get_position() == 0):
+            self.clear_bang()
+            return True   # nao apaga letra nenhuma desta vez
+        return False
 
     # ---- redirect no nivel da navegacao (pega digitado/clicado/colado) -----
     def on_decide(self, web, decision, dtype):
@@ -183,16 +272,33 @@ class PenaBrowser(Gtk.Window):
     def on_load_changed(self, web, event):
         # mantem a barra de endereco sincronizada com a pagina atual
         if event == WebKit2.LoadEvent.COMMITTED:
+            self.clear_bang()
             uri = web.get_uri() or ""
+            self._guard = True
             self.entry.set_text(uri)
+            self._guard = False
 
     def on_enter(self, entry):
         text = entry.get_text().strip()
+        # 1) bang ativo (pill verde): vai direto pro site do bang
+        if self.active_bang is not None:
+            url = BANGS[self.active_bang][1] % urllib.parse.quote(text)
+            self.load(url)
+            return
+        # 2) bang digitado sem espaco ainda (ex: "!yt gato" colado de uma vez)
+        if text.startswith("!") and " " in text:
+            token, rest = text[1:].split(" ", 1)
+            if token.lower() in BANGS:
+                url = BANGS[token.lower()][1] % urllib.parse.quote(rest.strip())
+                self.load(url)
+                return
+        # 3) endereco normal
         if looks_like_url(text):
             if not text.startswith(("http://", "https://", "about:", "file://")):
                 text = "https://" + text
             self.load(text)
         else:
+            # 4) busca normal
             self.load(SEARCH % urllib.parse.quote(text))
 
     def load(self, uri):

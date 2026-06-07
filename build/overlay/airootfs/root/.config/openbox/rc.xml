@@ -44,12 +44,34 @@
   </margins>
 
   <keyboard>
-    <!-- alternar janelas (estilo Mac/Windows) -->
+    <!-- alternar janelas (estilo Mac): mostra uma FILEIRA DE ICONES grandes dos
+         apps abertos (dialog=icons), igual ao "command+tab" do Mac, em vez da
+         listinha de texto. Traz a janela escolhida pra frente ao soltar Alt. -->
     <keybind key="A-Tab">
-      <action name="NextWindow"/>
+      <action name="NextWindow">
+        <dialog>icons</dialog>
+        <bar>no</bar>
+        <raise>yes</raise>
+        <allDesktops>yes</allDesktops>
+        <finalactions>
+          <action name="Focus"/>
+          <action name="Raise"/>
+          <action name="Unshade"/>
+        </finalactions>
+      </action>
     </keybind>
     <keybind key="A-S-Tab">
-      <action name="PreviousWindow"/>
+      <action name="PreviousWindow">
+        <dialog>icons</dialog>
+        <bar>no</bar>
+        <raise>yes</raise>
+        <allDesktops>yes</allDesktops>
+        <finalactions>
+          <action name="Focus"/>
+          <action name="Raise"/>
+          <action name="Unshade"/>
+        </finalactions>
+      </action>
     </keybind>
     <!-- fechar janela -->
     <keybind key="A-F4">

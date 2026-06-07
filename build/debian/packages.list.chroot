@@ -40,11 +40,25 @@ python3-gi
 gir1.2-gtk-3.0
 gir1.2-webkit2-4.1
 
-# ---- codecs de video (sem isto o Invidious da "incompatible") --------------
+# ---- codecs de video (sem isto o Invidious da "incompatible" / nao toca) ----
+#  WebKitGTK toca video via GStreamer. A lista abaixo cobre o que o player do
+#  Invidious precisa de verdade:
+#    base  -> opus/vorbis, sink basico, decode container
+#    good  -> webm/matroska, vp8/vp9, qtdemux (mp4)
+#    libav -> H.264/AAC (avdec_h264) — o codec mais comum do YouTube
+#    bad   -> MP4 FRAGMENTADO + MSE (Media Source Extensions) — e ISTO que
+#             faltava: o player do Invidious carrega o video em pedacos via MSE
+#             e sem o -bad ele simplesmente nao comeca.
+#    gl    -> desenha o frame na tela acelerado (cai pra software se nao tiver)
+#    alsa  -> a SAIDA DE SOM. Sem um sink de audio, varios players travam antes
+#             de mostrar imagem. ALSA fala direto com o /dev/snd (sem servidor
+#             de som pesado tipo pulse/pipewire — bom pra POTATO).
 gstreamer1.0-plugins-base
 gstreamer1.0-plugins-good
+gstreamer1.0-plugins-bad
 gstreamer1.0-libav
 gstreamer1.0-gl
+gstreamer1.0-alsa
 
 # ---- otimizacao pouca RAM (POTATO) -----------------------------------------
 systemd-zram-generator
