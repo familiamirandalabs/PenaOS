@@ -215,8 +215,25 @@ systemctl enable systemd-networkd.service 2>/dev/null || true
 systemctl enable systemd-resolved.service 2>/dev/null || true
 # nao trava o boot esperando a rede ficar pronta
 systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
-# regenera o initramfs JA com os ganchos do live-boot
-update-initramfs -u || update-initramfs -c -k all || true
+
+# regenera o initramfs JA com os ganchos do live-boot. SEM '|| true': se isto
+# falhar, o initrd nao vira "live", o boot=live e ignorado, NENHUMA raiz e
+# montada e o init morre no boot ('kernel panic: Attempted to kill init').
+# Melhor falhar AQUI, com erro claro, do que gerar uma ISO que da panic.
+update-initramfs -u
+
+# CONFERE de verdade que o initrd ficou "live" (tem os scripts do live-boot).
+# Esta e a checagem que faltava: e o que separa uma ISO que BOOTA de uma que
+# da kernel panic. Se nao tiver, paramos o build na hora.
+INITRD_FILE="$(ls -1 /boot/initrd.img-* | sort -V | tail -1)"
+if ! lsinitramfs "$INITRD_FILE" 2>/dev/null | grep -q 'scripts/live'; then
+    echo "FATAL: o initramfs NAO tem os scripts do live-boot."
+    echo "       Arquivo: $INITRD_FILE"
+    echo "       Sem isso o 'boot=live' e ignorado e o init morre no boot."
+    echo "       (live-boot instalado? hooks em /usr/share/initramfs-tools/scripts/live?)"
+    exit 3
+fi
+echo "OK: initramfs e LIVE (tem scripts/live) -> $INITRD_FILE"
 CHROOT
 
 # ---- 6) limpa e desmonta o chroot -------------------------------------------
@@ -255,6 +272,14 @@ menuentry "PenaOS Live ($ARCH)" {
 }
 menuentry "PenaOS Live (modo seguro: sem aceleracao)" {
     linux  /live/vmlinuz $BOOTAPP nomodeset
+    initrd /live/initrd
+}
+menuentry "PenaOS (depuracao: cai num shell, sem systemd)" {
+    # init=/bin/sh: o live-boot ainda monta a squashfs, mas em vez do systemd
+    # roda um shell direto. Se ESTA opcao abrir um '#' e a normal der panic,
+    # entao o live-boot esta OK e o problema e no systemd. Se ATE esta der
+    # panic, o problema e antes (initrd nao achou/montou a squashfs).
+    linux  /live/vmlinuz $BOOTAPP init=/bin/sh
     initrd /live/initrd
 }
 EOF
